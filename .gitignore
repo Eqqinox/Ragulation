@@ -34,10 +34,9 @@ Thumbs.db
 
 # IDE
 .vscode/
+.claude/
 .idea/
 
-# Claude Code local session state
-.claude/
 
 # Personal development notes and internal engineering standard: kept
 # locally for this developer's own workflow, not published in this repo.
