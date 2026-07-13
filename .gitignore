@@ -1,0 +1,47 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Environment and secrets
+.env*
+!.env.example
+
+# Test and quality tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# Local SBOM output
+sbom.json
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Editor swap files
+*.swp
+*~
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code local session state
+.claude/
+
+# Personal development notes and internal engineering standard: kept
+# locally for this developer's own workflow, not published in this repo.
+documentations/
+stateOfTheArt.md
+projet_1_rag_flagship.md
+
