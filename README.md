@@ -9,13 +9,15 @@ faithfulness and relevancy.
 
 ## Status
 
-Foundations and ingestion stage complete: corpus acquisition, Docling-based
-ingestion, three chunking strategies, an Ollama `bge-m3` embedding client,
-Qdrant hybrid indexing, and a 62-pair golden QA dataset. Verified end to
-end locally (fetch, ingest, chunk, index, query): 65 tests passing
-(57 unit, 8 integration), 89% unit test coverage, clean `pip-audit` and
-`gitleaks`. No CI badge yet: workflows are written and locally verified
-but have not run on GitHub Actions yet.
+Foundations, ingestion, retrieval tuning, and generation complete: corpus
+acquisition, Docling-based ingestion, three chunking strategies, an Ollama
+`bge-m3` embedding client, Qdrant hybrid indexing, a cross-encoder
+reranker, Mistral generation with citations and refusal, a FastAPI
+service, and a 62-pair golden QA dataset. Verified end to end locally
+(fetch, ingest, chunk, index, query, rerank, generate, serve): 95 tests
+passing (80 unit, 15 integration), 90% unit test coverage, clean
+`pip-audit` and `gitleaks`. No CI badge yet: workflows are written and
+locally verified but have not run on GitHub Actions yet.
 
 ## The problem it solves
 
@@ -35,6 +37,7 @@ uv sync
 docker compose up -d
 ollama serve &
 ollama pull bge-m3
+ollama pull mistral-small3.2
 uv run python scripts/build_index.py --strategy recursive
 ```
 
@@ -47,20 +50,27 @@ uv run python scripts/fetch_corpus.py
 uv run python scripts/ingest_corpus.py
 ```
 
-Verify it worked with a manual hybrid query:
+Then run the API and ask a question:
 
 ```bash
-uv run python - <<'PY'
-from rag_flagship.embeddings.dense import build_dense_embedding_model
-from rag_flagship.indexing.store import build_vector_store
-from rag_flagship.indexing.pipeline import hybrid_query
-
-embed_model = build_dense_embedding_model()
-vector_store = build_vector_store("rag_flagship_recursive")
-for r in hybrid_query(vector_store, embed_model, "What is the maximum fine for a GDPR infringement?", top_k=3):
-    print(round(r.score, 3), r.node.metadata["doc_id"], r.node.metadata["locator"])
-PY
+uv run uvicorn rag_flagship.api.app:app --reload
+curl -X POST localhost:8000/query \
+  -H 'Content-Type: application/json' \
+  -d '{"question": "What are the conditions for consent under GDPR?", "language": "en"}'
 ```
+
+A response looks like:
+
+```json
+{
+  "answer": "...",
+  "sources": [{"doc_id": "gdpr_en", "locator": "Article 7 - Conditions for consent", "score": 0.98}],
+  "refused": false
+}
+```
+
+Questions with no basis in the corpus (for example, about traffic law)
+return `"refused": true` instead of a fabricated answer.
 
 ## Key features
 
@@ -75,15 +85,26 @@ PY
   evaluation stage.
 - Hybrid retrieval: dense `bge-m3` embeddings plus BM25, fused with
   Reciprocal Rank Fusion, served from a local Qdrant instance.
+- Cross-encoder reranking (`BAAI/bge-reranker-v2-m3`) over the hybrid
+  retrieval candidates before generation.
+- Mistral (`mistral-small3.2` via Ollama) generation with a
+  citation-and-refusal prompt: a two-layer refusal design (a fast,
+  deterministic reranker-score threshold plus the model's own instructed
+  fallback) and structural, independently-verifiable citations returned
+  alongside every answer.
+- A FastAPI service (`GET /health`, `POST /query`, `POST /ingest`) built
+  on top of the same pipeline, with heavy dependencies (embedding model,
+  reranker, LLM, vector store client) constructed once at startup.
 - A 62-pair hand-curated golden question set (factual, multi-hop,
   out-of-corpus traps, and a cross-lingual subset), each fact-checked
-  against the real corpus while authoring.
+  against the real corpus while authoring, and used to calibrate the
+  refusal threshold against measured reranker scores.
 
 ## Architecture
 
-Three sequential CLI scripts, each writing its output to disk for the next
-to read, backed by a local Ollama server and a local Qdrant Docker
-container:
+Three sequential CLI scripts build the index, then a FastAPI service
+answers questions against it, backed by a local Ollama server and a local
+Qdrant Docker container:
 
 ```mermaid
 flowchart LR
@@ -92,16 +113,22 @@ flowchart LR
     C --> D[data/processed/]
     D --> E[build_index.py]
     E --> F[(Qdrant)]
+    F --> G[rag_flagship.api]
+    G -->|"rerank"| H[bge-reranker-v2-m3]
+    G -->|"generate"| I[Ollama mistral-small3.2]
 ```
 
 `src/rag_flagship/` is organized as one package per pipeline stage
-(`corpus`, `ingestion`, `chunking`, `embeddings`, `indexing`, `golden`),
-each with its own tests under `tests/unit/` and `tests/integration/`.
+(`corpus`, `ingestion`, `chunking`, `embeddings`, `indexing`, `reranking`,
+`generation`, `api`, `golden`), each with its own tests under
+`tests/unit/` and `tests/integration/`.
 
 ## Usage
 
 ```bash
 uv run python scripts/build_index.py --strategy {recursive,semantic,parent_child}
+uv run python scripts/calibrate_refusal_threshold.py
+uv run uvicorn rag_flagship.api.app:app --reload
 uv run pytest -q                    # unit tests, fast, no network or live models
 uv run pytest -q -m integration     # integration tests, needs Ollama and Qdrant running
 ```
@@ -115,19 +142,24 @@ Every setting is typed and environment-driven (pydantic-settings). Copy
 |---|---|---|
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
 | `OLLAMA_DENSE_MODEL_NAME` | `bge-m3` | Dense embedding model |
+| `OLLAMA_GENERATION_MODEL_NAME` | `mistral-small3.2` | Generation model |
 | `QDRANT_URL` | `http://localhost:6333` | Qdrant instance URL |
 | `QDRANT_API_KEY` | empty | Qdrant API key, if required |
-| `MISTRAL_API_KEY` | empty | Reserved for the generation stage, unused so far |
+| `RERANKER_MODEL_NAME` | `BAAI/bge-reranker-v2-m3` | Cross-encoder reranker model |
+| `RERANKER_DEVICE` | `cpu` | Hardcoded, not auto-detected: GPU inference silently produced wrong scores under memory contention with Ollama on this machine |
 
 ## Key decisions
 
 Fully open-source and local stack, chosen to run entirely on the
 developer's own machine: Docling for parsing, LlamaIndex for chunking and
 vector store orchestration, Ollama `bge-m3` for dense embeddings, BM25
-(`fastembed`) for the sparse side of hybrid retrieval, and Qdrant
-(self-hosted via Docker) for storage and Reciprocal Rank Fusion. Data is
-tracked directly in Git rather than with a data-versioning tool, since the
-corpus is small enough not to need one.
+(`fastembed`) for the sparse side of hybrid retrieval, Qdrant (self-hosted
+via Docker) for storage and Reciprocal Rank Fusion, `sentence-transformers`
+for cross-encoder reranking, and Ollama `mistral-small3.2` for generation.
+Data is tracked directly in Git rather than with a data-versioning tool,
+since the corpus is small enough not to need one. Citations are returned
+as a structural, typed field on every response rather than left to the
+model's own inline prose, since the latter is not reliably accurate.
 
 ## Security
 

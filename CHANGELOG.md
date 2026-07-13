@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `rag_flagship.reranking` module: cross-encoder reranking with
+  `BAAI/bge-reranker-v2-m3` via `sentence-transformers`, CPU-only by
+  design (see Fixed, below).
+- `rag_flagship.generation` module: Mistral (`mistral-small3.2` via
+  Ollama) answer generation with a citation-and-refusal prompt and a
+  two-layer refusal design (a fast reranker-score threshold, calibrated
+  at 0.27 against the full golden dataset, plus the model's own
+  instructed fallback); structural, independently-verifiable citations
+  (`answer`, `sources`, `refused` on every response).
+- `rag_flagship.api` module: a FastAPI service (`GET /health`,
+  `POST /query`, `POST /ingest`), heavy dependencies constructed once at
+  startup; manually verified end to end against the real local stack,
+  including a correct in-corpus answer with citations and a correct
+  refusal on an out-of-corpus question.
+- `scripts/calibrate_refusal_threshold.py`: measures the reranker score
+  gap between out-of-corpus and in-corpus golden questions.
+- Reranking, generation, and API dependencies (`sentence-transformers`,
+  `llama-index-llms-ollama`, `fastapi`, `uvicorn[standard]`, `httpx2`).
 - Repository scaffold: `src` layout, internal engineering documentation
   and audit trail, CI workflow placeholders.
 - Decision to source the corpus from EU AI Act + GDPR (EN/FR, official
@@ -49,6 +67,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A silent, incorrect reranking bug: `sentence-transformers` would
+  auto-select Apple's MPS GPU backend for the reranker, which under
+  memory contention with Ollama's own models returned identical scores
+  for genuinely different passages without raising any exception.
+  Fixed by forcing CPU inference for the reranker; a regression test
+  now guards against this recurring.
 - ADR-0001 addendum: `eur-lex.europa.eu`'s own pages block plain HTTP
   clients behind an AWS WAF challenge; the four core regulation documents
   are now fetched from the Publications Office's Cellar endpoint instead.
