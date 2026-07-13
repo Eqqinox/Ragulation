@@ -70,6 +70,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ci.yml`/`security.yml` triggered on `push.branches: [master]`, a
   stale reference from before the branch was renamed to `main`; CI had
   never actually run on any push as a result. Fixed to `[main]`.
+- Once CI actually ran, the Python 3.13 job failed: `mypy`'s pinned
+  `python_version = "3.11"` rejected numpy 2.5.1's stub syntax (numpy
+  2.5.1 is only resolved under a 3.13 interpreter). Fixed by letting
+  mypy auto-detect its target version from whichever interpreter runs
+  it, matching the CI matrix instead of one static value.
 - A silent, incorrect reranking bug: `sentence-transformers` would
   auto-select Apple's MPS GPU backend for the reranker, which under
   memory contention with Ollama's own models returned identical scores

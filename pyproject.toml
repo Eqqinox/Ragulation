@@ -44,7 +44,6 @@ ignore = ["S101"]
 "src/rag_flagship/api/**" = ["B008"]  # FastAPI's Depends() is meant to be a default argument
 
 [tool.mypy]
-python_version = "3.11"
 strict = true
 files = ["src"]
 plugins = ["pydantic.mypy"]
