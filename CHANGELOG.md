@@ -67,6 +67,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `ci.yml`/`security.yml` triggered on `push.branches: [master]`, a
+  stale reference from before the branch was renamed to `main`; CI had
+  never actually run on any push as a result. Fixed to `[main]`.
 - A silent, incorrect reranking bug: `sentence-transformers` would
   auto-select Apple's MPS GPU backend for the reranker, which under
   memory contention with Ollama's own models returned identical scores
