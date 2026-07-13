@@ -7,8 +7,8 @@ the real ~500 MB model in a unit test; see tests/unit/reranking/.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Protocol
+from collections.abc import Iterable, Sequence
+from typing import Any, Protocol
 
 from llama_index.core.schema import NodeWithScore
 
@@ -16,7 +16,12 @@ PairInput = tuple[str, str]
 
 
 class Reranker(Protocol):
-    def predict(self, inputs: list[PairInput]) -> Sequence[float]: ...
+    # Real sentence_transformers.CrossEncoder.predict is overloaded to
+    # return a torch.Tensor, a numpy array, or a list depending on flags
+    # neither typeshed nor this Protocol needs to care about; every one
+    # of those is iterable and its elements are float()-convertible,
+    # which is all rerank() below relies on.
+    def predict(self, inputs: list[PairInput]) -> Iterable[Any]: ...
 
 
 def rerank(
