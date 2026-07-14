@@ -10,7 +10,7 @@ from qdrant_client import QdrantClient
 
 from rag_flagship.chunking.models import Chunk
 from rag_flagship.embeddings.dense import build_dense_embedding_model
-from rag_flagship.indexing.pipeline import hybrid_query, index_chunks
+from rag_flagship.indexing.pipeline import dense_query, hybrid_query, index_chunks
 from rag_flagship.indexing.settings import QdrantSettings
 from rag_flagship.indexing.store import build_vector_store
 
@@ -59,6 +59,24 @@ def test_indexed_chunks_are_retrievable_by_hybrid_query(clean_collection) -> Non
     assert indexed_count == len(CHUNKS)
 
     results = hybrid_query(
+        vector_store,
+        embed_model,
+        "What documentation must AI model providers maintain?",
+        top_k=2,
+    )
+
+    assert len(results) >= 1
+    assert results[0].node.metadata["locator"] == "Article 53"
+
+
+def test_indexed_chunks_are_retrievable_by_dense_query(clean_collection) -> None:
+    embed_model = build_dense_embedding_model()
+    vector_store = build_vector_store(TEST_COLLECTION, client=clean_collection)
+
+    indexed_count = index_chunks(CHUNKS, vector_store=vector_store, embed_model=embed_model)
+    assert indexed_count == len(CHUNKS)
+
+    results = dense_query(
         vector_store,
         embed_model,
         "What documentation must AI model providers maintain?",

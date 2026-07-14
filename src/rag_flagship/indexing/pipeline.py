@@ -75,3 +75,21 @@ def hybrid_query(
         similarity_top_k=top_k,
     )
     return retriever.retrieve(query_text)
+
+
+def dense_query(
+    vector_store: BasePydanticVectorStore,
+    embed_model: BaseEmbedding,
+    query_text: str,
+    top_k: int = 5,
+) -> list[NodeWithScore]:
+    """Run a dense-only query (no BM25 sparse side, no RRF fusion),
+    returning the top_k ranked results. Exists alongside hybrid_query so
+    the Semaine 3 evaluation grid can compare dense-only versus hybrid
+    retrieval; see ADR-0006."""
+    index = VectorStoreIndex.from_vector_store(vector_store, embed_model=embed_model)
+    retriever = index.as_retriever(
+        vector_store_query_mode=VectorStoreQueryMode.DEFAULT,
+        similarity_top_k=top_k,
+    )
+    return retriever.retrieve(query_text)

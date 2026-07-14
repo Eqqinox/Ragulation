@@ -9,15 +9,20 @@ faithfulness and relevancy.
 
 ## Status
 
-Foundations, ingestion, retrieval tuning, and generation complete: corpus
-acquisition, Docling-based ingestion, three chunking strategies, an Ollama
-`bge-m3` embedding client, Qdrant hybrid indexing, a cross-encoder
-reranker, Mistral generation with citations and refusal, a FastAPI
-service, and a 62-pair golden QA dataset. Verified end to end locally
-(fetch, ingest, chunk, index, query, rerank, generate, serve): 95 tests
-passing (80 unit, 15 integration), 90% unit test coverage, clean
-`pip-audit` and `gitleaks`. No CI badge yet: workflows are written and
-locally verified but have not run on GitHub Actions yet.
+Foundations, ingestion, retrieval tuning, generation, and evaluation
+complete: corpus acquisition, Docling-based ingestion, three chunking
+strategies (all indexed at full corpus scale), an Ollama `bge-m3`
+embedding client, Qdrant hybrid indexing, a cross-encoder reranker,
+Mistral generation with citations and refusal, a FastAPI service, a
+62-pair golden QA dataset, and a RAGAS evaluation pipeline (faithfulness,
+answer relevancy, context precision, context recall) with an automated
+CI faithfulness gate. Verified end to end locally (fetch, ingest, chunk,
+index, query, rerank, generate, serve, evaluate): 102 tests passing
+(84 unit, 18 integration), 88% unit test coverage, clean `pip-audit` and
+`gitleaks`. Lint/type/test CI is confirmed green on GitHub Actions
+across the full Python 3.11/3.12/3.13 matrix; the new CI faithfulness
+gate is written and locally verified but not yet confirmed on a real
+Actions run.
 
 ## The problem it solves
 
@@ -99,6 +104,11 @@ return `"refused": true` instead of a fabricated answer.
   out-of-corpus traps, and a cross-lingual subset), each fact-checked
   against the real corpus while authoring, and used to calibrate the
   refusal threshold against measured reranker scores.
+- RAGAS evaluation (faithfulness, answer relevancy, context precision,
+  context recall) across a 12-configuration comparison grid (3 chunking
+  strategies x 2 retrieval modes x with/without reranker), plus an
+  automated CI gate that blocks merges below a measured faithfulness
+  floor, using a small judge model sized for GitHub-hosted runners.
 
 ## Architecture
 
@@ -116,12 +126,14 @@ flowchart LR
     F --> G[rag_flagship.api]
     G -->|"rerank"| H[bge-reranker-v2-m3]
     G -->|"generate"| I[Ollama mistral-small3.2]
+    F --> J[run_eval_grid.py / run_ci_eval_gate.py]
+    J -->|"score"| K[RAGAS: faithfulness, relevancy, precision, recall]
 ```
 
 `src/rag_flagship/` is organized as one package per pipeline stage
 (`corpus`, `ingestion`, `chunking`, `embeddings`, `indexing`, `reranking`,
-`generation`, `api`, `golden`), each with its own tests under
-`tests/unit/` and `tests/integration/`.
+`generation`, `api`, `evaluation`, `golden`), each with its own tests
+under `tests/unit/` and `tests/integration/`.
 
 ## Usage
 
@@ -129,6 +141,7 @@ flowchart LR
 uv run python scripts/build_index.py --strategy {recursive,semantic,parent_child}
 uv run python scripts/calibrate_refusal_threshold.py
 uv run uvicorn rag_flagship.api.app:app --reload
+uv run python scripts/run_eval_grid.py grid    # the 12-config RAGAS comparison
 uv run pytest -q                    # unit tests, fast, no network or live models
 uv run pytest -q -m integration     # integration tests, needs Ollama and Qdrant running
 ```
@@ -147,6 +160,46 @@ Every setting is typed and environment-driven (pydantic-settings). Copy
 | `QDRANT_API_KEY` | empty | Qdrant API key, if required |
 | `RERANKER_MODEL_NAME` | `BAAI/bge-reranker-v2-m3` | Cross-encoder reranker model |
 | `RERANKER_DEVICE` | `cpu` | Hardcoded, not auto-detected: GPU inference silently produced wrong scores under memory contention with Ollama on this machine |
+| `OLLAMA_JUDGE_MODEL_NAME` | `mistral-small3.2` | RAGAS judge model; overridden to a small model in CI |
+
+Ollama must additionally be started with `OLLAMA_CONTEXT_LENGTH=16384`
+for evaluation to work correctly: its OpenAI-compatible endpoint
+silently ignores smaller per-request context overrides, so the context
+window has to be raised server-wide instead.
+
+## Evaluation
+
+RAGAS scores this pipeline (faithfulness, answer relevancy, context
+precision, context recall) across a 12-configuration grid: 3 chunking
+strategies (recursive, semantic, parent-child) x dense-only vs. hybrid
+retrieval x with/without reranking, run against a fixed golden-dataset
+subsample. The winning configuration -- semantic chunking with
+dense-only retrieval -- was then re-evaluated against the full
+56-question answerable set (`out_of_corpus` questions excluded, since
+faithfulness-style metrics don't meaningfully apply to a question the
+system should refuse) for a statistically sturdier headline number:
+
+| Metric | Naive baseline (recursive, dense, no reranker) | Tuned winner, full 56-question set |
+|---|---|---|
+| Faithfulness | 0.900 | **0.915** |
+| Answer relevancy | 0.763 | 0.782 |
+| Context precision | 0.733 | 0.743 |
+| Context recall | 0.944 | 0.943 |
+
+The baseline column is measured on the 12-question subsample (only the
+winning configuration was re-run at the full 56-question scale, since
+re-running all 12 at full scale would take days); on that same
+subsample the winner actually scored a perfect 1.000 faithfulness,
+which dropped to 0.915 once measured against 4x more questions -- a
+useful reminder that small-sample eval results can look better than
+they are, and the fuller number is the one to trust.
+
+The full 12-config grid is in `scripts/run_eval_grid.py`, runnable
+locally end to end; results are also available as raw JSON for anyone
+who wants to inspect every question's score rather than just the
+means. A small, automated CI gate (`.github/workflows/eval.yml`) checks
+faithfulness on every push and pull request using a compact judge model
+sized for GitHub-hosted runners.
 
 ## Key decisions
 
@@ -160,6 +213,12 @@ Data is tracked directly in Git rather than with a data-versioning tool,
 since the corpus is small enough not to need one. Citations are returned
 as a structural, typed field on every response rather than left to the
 model's own inline prose, since the latter is not reliably accurate.
+Evaluation uses `ragas` with a judge and embeddings client built against
+Ollama's OpenAI-compatible endpoint (`openai` as a thin HTTP client, not
+the real OpenAI API), keeping the same 0 €, fully local stance end to
+end; the CI gate uses a different, smaller judge model than local runs,
+since the full-size generation model does not fit a GitHub-hosted
+runner's disk budget.
 
 ## Security
 

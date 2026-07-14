@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `rag_flagship.evaluation` module: RAGAS's four core metrics
+  (faithfulness, answer relevancy, context precision, context recall),
+  built on a judge/embeddings client pointed at Ollama's OpenAI-
+  compatible endpoint.
+- `rag_flagship.indexing.dense_query`: dense-only retrieval alongside
+  the existing hybrid `hybrid_query`, for comparing dense-only versus
+  hybrid retrieval.
+- `scripts/run_eval_grid.py`: a 12-config comparison grid (3 chunking
+  strategies x 2 retrieval modes x with/without reranker) against a
+  fixed golden-dataset subsample, plus a `full` command producing the
+  headline numbers for the winning configuration.
+- `scripts/run_ci_eval_gate.py` and `.github/workflows/eval.yml`: an
+  automated CI faithfulness gate running on every push and PR, using a
+  small, GitHub-hosted-runner-sized judge model against a tiny fixed
+  corpus subset.
+- `semantic` and `parent_child` chunking strategies now indexed at full
+  corpus scale (1597 passages -> 2968 and 3917 chunks respectively),
+  alongside `recursive`.
+- `ragas`, `openai` dependencies (`langchain`/`langchain-community` are
+  also now direct dependencies, required transitively by `ragas`).
 - `rag_flagship.reranking` module: cross-encoder reranking with
   `BAAI/bge-reranker-v2-m3` via `sentence-transformers`, CPU-only by
   design (see Fixed, below).
@@ -67,6 +87,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- RAGAS's own `max_tokens` default (1024) was too small for structured
+  metric output against real, multi-sentence generated answers; raised
+  to 4096. Separately, Ollama's OpenAI-compatible endpoint was found to
+  silently ignore per-request context-window overrides (a genuine
+  platform limitation, not a code bug); fixed operationally by
+  requiring Ollama to be started with `OLLAMA_CONTEXT_LENGTH=16384`.
+- A `ragas`/`langchain-community` import incompatibility: installing
+  latest `langchain-community` broke `import ragas` outright (a known,
+  unresolved upstream issue). Fixed by pinning
+  `langchain-community>=0.4.1,<0.4.2`.
 - `ci.yml`/`security.yml` triggered on `push.branches: [master]`, a
   stale reference from before the branch was renamed to `main`; CI had
   never actually run on any push as a result. Fixed to `[main]`.
