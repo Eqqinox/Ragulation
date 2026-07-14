@@ -87,6 +87,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The first real push of the Semaine 3 changes failed CI twice:
+  `pip-audit` fails the build on any finding by default, including two
+  already-reviewed, accepted vulnerabilities with no fix available;
+  fixed with `--ignore-vuln`. Separately, the CI faithfulness gate's
+  original judge model (`qwen2.5:1.5b`) could not reliably produce
+  RAGAS's structured metric output on the GitHub-hosted runner's
+  CPU-only Ollama build, despite working reliably in local testing on
+  a GPU-accelerated machine; fixed by switching the CI judge to
+  `qwen2.5:3b`.
 - RAGAS's own `max_tokens` default (1024) was too small for structured
   metric output against real, multi-sentence generated answers; raised
   to 4096. Separately, Ollama's OpenAI-compatible endpoint was found to

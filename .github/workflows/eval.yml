@@ -55,15 +55,23 @@ jobs:
           exit 1
 
       - name: Pull models
-        # qwen2.5:1.5b serves both the generation and judge roles in
-        # CI (mistral-small3.2, used for both roles locally, is 15 GB
-        # and does not fit a GitHub-hosted runner's ~14 GB disk budget).
+        # qwen2.5:3b serves both the generation and judge roles in CI
+        # (mistral-small3.2, used for both roles locally, is 15 GB and
+        # does not fit a GitHub-hosted runner's ~14 GB disk budget).
+        # qwen2.5:1.5b was tried first and failed the real first CI run:
+        # it consistently could not produce RAGAS's ContextRecall
+        # structured output on this runner's CPU-only Ollama build,
+        # even though it worked reliably in local testing on this
+        # project's GPU-accelerated Mac -- a real backend-dependent
+        # reliability difference, not flakiness. 3b fixed it, verified
+        # against the exact 3 gate questions before switching. See
+        # ADR-0006's addendum.
         run: |
-          ollama pull qwen2.5:1.5b
+          ollama pull qwen2.5:3b
           ollama pull bge-m3
 
       - name: Run the faithfulness gate
         env:
-          OLLAMA_GENERATION_MODEL_NAME: "qwen2.5:1.5b"
-          OLLAMA_JUDGE_MODEL_NAME: "qwen2.5:1.5b"
+          OLLAMA_GENERATION_MODEL_NAME: "qwen2.5:3b"
+          OLLAMA_JUDGE_MODEL_NAME: "qwen2.5:3b"
         run: uv run python scripts/run_ci_eval_gate.py
