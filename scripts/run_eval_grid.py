@@ -106,7 +106,7 @@ class SharedResources:
         self.llm = build_generation_model()
         judge_client = build_judge_client()
         self.judge_llm = build_judge_llm(judge_client)
-        self.judge_embeddings = build_judge_embeddings(judge_client)
+        self.judge_embeddings = build_judge_embeddings()
 
 
 def run_one_config(

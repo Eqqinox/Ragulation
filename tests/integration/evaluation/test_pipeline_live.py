@@ -20,7 +20,7 @@ pytestmark = pytest.mark.integration
 def test_faithful_answer_scores_highly_on_all_four_metrics() -> None:
     client = build_judge_client()
     llm = build_judge_llm(client)
-    embeddings = build_judge_embeddings(client)
+    embeddings = build_judge_embeddings()
 
     sample = EvalSample(
         qa_id="factual_en_gdpr_003",
@@ -48,7 +48,7 @@ def test_faithful_answer_scores_highly_on_all_four_metrics() -> None:
 def test_unfaithful_answer_scores_low_on_faithfulness() -> None:
     client = build_judge_client()
     llm = build_judge_llm(client)
-    embeddings = build_judge_embeddings(client)
+    embeddings = build_judge_embeddings()
 
     sample = EvalSample(
         qa_id="fabricated_001",

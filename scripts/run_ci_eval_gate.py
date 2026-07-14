@@ -83,7 +83,7 @@ def main() -> int:
 
     judge_client = build_judge_client()
     judge_llm = build_judge_llm(judge_client)
-    judge_embeddings = build_judge_embeddings(judge_client)
+    judge_embeddings = build_judge_embeddings()
 
     samples = []
     for golden in golden_pairs:
