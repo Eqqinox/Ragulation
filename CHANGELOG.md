@@ -94,8 +94,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   original judge model (`qwen2.5:1.5b`) could not reliably produce
   RAGAS's structured metric output on the GitHub-hosted runner's
   CPU-only Ollama build, despite working reliably in local testing on
-  a GPU-accelerated machine; fixed by switching the CI judge to
-  `qwen2.5:3b`.
+  a GPU-accelerated machine. After testing five real candidates against
+  the gate's exact questions, the CI judge settled on `ministral-3:3b`
+  (rejecting `qwen2.5:3b` for one anomalous scoring result, `qwen3.5:4b`
+  for unusably slow "thinking mode" generations, `gemma4:E4B` for a
+  9.6 GB disk footprint, and `SmolLM3-3B` for not being in Ollama's
+  official library).
 - RAGAS's own `max_tokens` default (1024) was too small for structured
   metric output against real, multi-sentence generated answers; raised
   to 4096. Separately, Ollama's OpenAI-compatible endpoint was found to
