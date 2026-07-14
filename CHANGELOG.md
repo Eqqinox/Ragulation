@@ -87,19 +87,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- The first real push of the Semaine 3 changes failed CI twice:
+- The first real push of the Semaine 3 changes failed CI repeatedly:
   `pip-audit` fails the build on any finding by default, including two
   already-reviewed, accepted vulnerabilities with no fix available;
   fixed with `--ignore-vuln`. Separately, the CI faithfulness gate's
-  original judge model (`qwen2.5:1.5b`) could not reliably produce
-  RAGAS's structured metric output on the GitHub-hosted runner's
-  CPU-only Ollama build, despite working reliably in local testing on
-  a GPU-accelerated machine. After testing five real candidates against
-  the gate's exact questions, the CI judge settled on `ministral-3:3b`
-  (rejecting `qwen2.5:3b` for one anomalous scoring result, `qwen3.5:4b`
-  for unusably slow "thinking mode" generations, `gemma4:E4B` for a
-  9.6 GB disk footprint, and `SmolLM3-3B` for not being in Ollama's
-  official library).
+  judge model could not reliably produce RAGAS's structured metric
+  output on the GitHub-hosted runner's CPU-only Ollama build, despite
+  working reliably in local testing on a GPU-accelerated machine --
+  this happened with `qwen2.5:1.5b`, then again with `ministral-3:3b`
+  after a broader model search (also rejecting `qwen2.5:3b` for one
+  anomalous scoring result, `qwen3.5:4b` for unusably slow "thinking
+  mode" generations, `gemma4:E4B` for a 9.6 GB disk footprint, and
+  `SmolLM3-3B` for not being in Ollama's official library). The second
+  failure was the real signal: no small local model's CI reliability
+  can be predicted from GPU-only local testing. Fixed by moving
+  generation and judging to Ollama Cloud (`gemma4`), which runs on real
+  hosted inference hardware instead of the runner's own CPU; `bge-m3`
+  embeddings still run on a locally installed Ollama in CI, since
+  Ollama Cloud's catalog has no embedding models.
 - RAGAS's own `max_tokens` default (1024) was too small for structured
   metric output against real, multi-sentence generated answers; raised
   to 4096. Separately, Ollama's OpenAI-compatible endpoint was found to

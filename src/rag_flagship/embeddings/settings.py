@@ -16,3 +16,9 @@ class EmbeddingSettings(BaseSettings):
     base_url: str = "http://localhost:11434"
     dense_model_name: str = "bge-m3"
     """See ADR-0002: Ollama's bge-m3 exposes dense embeddings only."""
+    api_key: str = ""
+    """Empty for a local Ollama server (no auth). Set to an Ollama Cloud
+    API key, with base_url=https://ollama.com, to run embeddings there
+    instead -- used by the CI faithfulness gate, since GitHub-hosted
+    runners are CPU-only and were measurably too slow embedding even a
+    single document locally (~14 minutes). See ADR-0006."""

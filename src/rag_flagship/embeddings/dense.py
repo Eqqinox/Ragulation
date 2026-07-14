@@ -14,7 +14,11 @@ from rag_flagship.embeddings.settings import EmbeddingSettings
 
 def build_dense_embedding_model(settings: EmbeddingSettings | None = None) -> OllamaEmbedding:
     active_settings = settings if settings is not None else EmbeddingSettings()
+    client_kwargs = {}
+    if active_settings.api_key:
+        client_kwargs["headers"] = {"Authorization": f"Bearer {active_settings.api_key}"}
     return OllamaEmbedding(
         model_name=active_settings.dense_model_name,
         base_url=active_settings.base_url,
+        client_kwargs=client_kwargs,
     )

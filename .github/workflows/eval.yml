@@ -2,12 +2,38 @@ name: Eval
 
 # Runs a small, fast RAGAS faithfulness regression gate on every push
 # and PR, against a tiny fixed corpus subset (gdpr_en only) and 3 fixed
-# questions, using a small CI-sized judge model. Kept as its own
-# workflow, separate from ci.yml's fast lint/type/unit-test job, since
-# this involves real LLM calls and is slower and less deterministic.
-# See ADR-0006 and scripts/run_ci_eval_gate.py for the full design and
-# why the CI judge model differs from the local/headline judge
-# (mistral-small3.2 does not fit a GitHub-hosted runner's disk budget).
+# questions. Kept as its own workflow, separate from ci.yml's fast
+# lint/type/unit-test job, since this involves real LLM calls and is
+# slower and less deterministic.
+#
+# Generation and the judge run on Ollama Cloud (https://ollama.com),
+# using gemma4; embeddings (bge-m3) still run on a locally installed
+# Ollama, since Ollama Cloud's catalog is large frontier models only
+# (glm/qwen/gemma/minimax/kimi/deepseek/nemotron/gpt-oss-scale, no
+# embedding models at all -- confirmed against ollama.com/search?c=cloud
+# directly, not assumed).
+#
+# This is the fourth CI judge design, not the first attempt: a small
+# local model (mistral-small3.2 does not fit a GitHub-hosted runner's
+# ~14 GB disk budget) was tried first, then several other small local
+# models (qwen2.5:1.5b, qwen2.5:3b, ministral-3:3b), all of which
+# failed RAGAS's ContextRecall structured output specifically on this
+# runner's CPU-only Ollama build -- every time, even after each was
+# separately verified reliable on this project's local GPU-accelerated
+# Ollama first. Ollama Cloud runs generation/judging on real inference
+# hardware, removing that backend-dependent gap at its root instead of
+# continuing to search for a small local model immune to it. gemma4
+# was rejected earlier in this same search purely for its 9.6 GB local
+# disk footprint (matryoshka architecture, larger on disk than its "4B
+# effective" name suggests) -- that constraint does not apply when it
+# is called as a hosted API instead of pulled locally, so it is back in
+# consideration here, now actually tested for structured-output
+# reliability rather than ruled out on size alone. See ADR-0006's
+# addenda for the full history.
+#
+# Requires an OLLAMA_API_KEY repository secret (an Ollama Cloud API
+# key, generated at ollama.com/settings/keys). See
+# scripts/run_ci_eval_gate.py for the full design.
 
 on:
   push:
@@ -44,6 +70,9 @@ jobs:
         run: curl -fsSL https://ollama.com/install.sh | sh
 
       - name: Start Ollama
+        # Serves bge-m3 embeddings only in this job -- generation and
+        # the judge run on Ollama Cloud instead (see the workflow's
+        # header comment).
         run: |
           OLLAMA_CONTEXT_LENGTH=16384 nohup ollama serve > /tmp/ollama.log 2>&1 &
           for i in $(seq 1 30); do
@@ -54,31 +83,15 @@ jobs:
           cat /tmp/ollama.log
           exit 1
 
-      - name: Pull models
-        # ministral-3:3b (Mistral AI, Apache-2.0, ~3.0 GB) serves both
-        # the generation and judge roles in CI (mistral-small3.2, used
-        # for both roles locally, is 15 GB and does not fit a
-        # GitHub-hosted runner's ~14 GB disk budget). Four other
-        # candidates were tried and rejected with evidence, not by
-        # guessing: qwen2.5:1.5b consistently failed RAGAS's
-        # ContextRecall structured output on this runner's CPU-only
-        # Ollama build (worked reliably in local GPU testing -- a real
-        # backend-dependent reliability gap, not flakiness); qwen2.5:3b
-        # fixed that but showed one anomalous answer_relevancy=0.0 on a
-        # clearly correct answer during further testing; qwen3.5:4b's
-        # "thinking mode" never completed a single one of 12 test calls
-        # after 24+ minutes, unusably slow for CI regardless of eventual
-        # correctness; gemma4:E4B was ruled out on disk size alone
-        # (9.6 GB despite "4B effective" naming). ministral-3:3b scored
-        # a clean 12/12 on the exact 3 gate questions across all four
-        # metrics, ~12s/call, no anomalies, before switching. See
-        # ADR-0006's addendum.
-        run: |
-          ollama pull ministral-3:3b
-          ollama pull bge-m3
+      - name: Pull the embedding model
+        run: ollama pull bge-m3
 
       - name: Run the faithfulness gate
         env:
-          OLLAMA_GENERATION_MODEL_NAME: "ministral-3:3b"
-          OLLAMA_JUDGE_MODEL_NAME: "ministral-3:3b"
+          OLLAMA_GENERATION_BASE_URL: "https://ollama.com"
+          OLLAMA_GENERATION_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+          OLLAMA_GENERATION_MODEL_NAME: "gemma4"
+          OLLAMA_JUDGE_BASE_URL: "https://ollama.com"
+          OLLAMA_JUDGE_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+          OLLAMA_JUDGE_MODEL_NAME: "gemma4"
         run: uv run python scripts/run_ci_eval_gate.py

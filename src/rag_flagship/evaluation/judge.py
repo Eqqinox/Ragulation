@@ -23,7 +23,11 @@ from rag_flagship.evaluation.settings import EvaluationSettings
 
 def build_judge_client(settings: EvaluationSettings | None = None) -> AsyncOpenAI:
     settings = settings or EvaluationSettings()
-    return AsyncOpenAI(base_url=f"{settings.base_url}/v1", api_key="ollama")
+    # A real key routes to Ollama Cloud; "ollama" is a dummy value a
+    # local Ollama server ignores (no auth required).
+    return AsyncOpenAI(
+        base_url=f"{settings.judge_base_url}/v1", api_key=settings.judge_api_key or "ollama"
+    )
 
 
 def build_judge_llm(
