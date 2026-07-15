@@ -34,6 +34,19 @@ name: Eval
 # Requires an OLLAMA_API_KEY repository secret (an Ollama Cloud API
 # key, generated at ollama.com/settings/keys). See
 # scripts/run_ci_eval_gate.py for the full design.
+#
+# The reranker (BAAI/bge-reranker-v2-m3, ~500 MB, sentence-transformers)
+# downloads from the Hugging Face Hub on every job by default, since
+# GitHub-hosted runners start from a clean disk each time. Measured
+# directly on a cache-cold run: this download alone accounted for
+# roughly 14 of the job's ~27 total minutes. The cache step below
+# persists it across runs, keyed on the model name (not a lock file --
+# there is nothing else in this repo pinning that version), so only a
+# cache-cold run (the very first run, or any run after the cache is
+# evicted/invalidated) pays that cost; every other run should be
+# roughly half the total time. Worth calling out plainly to anyone
+# reading this workflow for the first time, so a slow first run doesn't
+# read as broken.
 
 on:
   push:
@@ -65,6 +78,12 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --locked
+
+      - name: Cache the reranker's Hugging Face Hub weights
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/huggingface
+          key: hf-hub-bge-reranker-v2-m3-${{ runner.os }}
 
       - name: Install Ollama
         run: curl -fsSL https://ollama.com/install.sh | sh
