@@ -20,9 +20,8 @@ CI faithfulness gate. Verified end to end locally (fetch, ingest, chunk,
 index, query, rerank, generate, serve, evaluate): 102 tests passing
 (84 unit, 18 integration), 88% unit test coverage, clean `pip-audit` and
 `gitleaks`. Lint/type/test CI is confirmed green on GitHub Actions
-across the full Python 3.11/3.12/3.13 matrix; the new CI faithfulness
-gate is written and locally verified but not yet confirmed on a real
-Actions run.
+across the full Python 3.11/3.12/3.13 matrix; the CI faithfulness gate
+is also confirmed green on real GitHub Actions runs.
 
 ## The problem it solves
 
@@ -200,6 +199,18 @@ who wants to inspect every question's score rather than just the
 means. A small, automated CI gate (`.github/workflows/eval.yml`) checks
 faithfulness on every push and pull request using a compact judge model
 sized for GitHub-hosted runners.
+
+This CI gate takes roughly 30 minutes end to end, most of which is not
+the RAGAS scoring itself: `BAAI/bge-reranker-v2-m3` (the cross-encoder
+reranker, unrelated to the judge/generation models) takes a measured
+~14 minutes to load on a GitHub-hosted runner's constrained CPU. This
+was investigated directly, not assumed: caching its Hugging Face Hub
+weights had no effect (confirmed via a cache hit that still showed the
+same delay), and neither did `low_cpu_mem_usage=True` (a documented fix
+for a different, longstanding `transformers` loading inefficiency).
+Since this gate only checks correctness on every push, not the ability
+to keep developing locally in the meantime, the wait is left as a known
+characteristic rather than a bug to keep chasing.
 
 ## Key decisions
 
